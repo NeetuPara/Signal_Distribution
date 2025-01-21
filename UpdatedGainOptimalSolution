@@ -1,0 +1,156 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <limits>
+
+// Component Specifications
+const double MAX_POWER_1GHz = 19.0;   // dBm
+const double MAX_POWER_20GHz = 16.0; // dBm
+const double MIN_POWER_1GHz = -55.0; // dBm
+const double MIN_POWER_20GHz = -55.0; // dBm
+const double LEAKAGE_1GHz = -145.0;   // dBm
+const double LEAKAGE_20GHz = -137.0;  // dBm
+const double RESOLUTION = 0.01;       // dB
+
+struct Component {
+    std::string name;
+    double gain1GHz;
+    double gain20GHz;
+    double cost;
+    double p1dB; // Maximum linear power before compression
+};
+
+// Components database
+std::vector<Component> amplifiers = {
+    {"Amp-A", 15.0, 14.0, 100.0, 18.0},
+    {"Amp-B", 19.0, 18.0, 120.0, 22.0},
+    {"Amp-C", 20.0, 19.0, 150.0, 25.0},
+    {"Amp-D", 18.0, 17.0, 110.0, 20.0},
+    {"Amp-E", 16.0, 15.0, 105.0, 19.0},
+    {"Amp-F", 17.0, 16.0, 115.0, 21.0}
+};
+
+std::vector<Component> attenuators = {
+    {"Att-A", -1.0, -1.0, 10.0, std::numeric_limits<double>::max()},
+    {"Att-B", -2.0, -2.0, 12.0, std::numeric_limits<double>::max()},
+    {"Att-C", -3.0, -3.0, 15.0, std::numeric_limits<double>::max()},
+    {"Att-D", -5.0, -5.0, 20.0, std::numeric_limits<double>::max()},
+    {"Att-E", -10.0, -10.0, 30.0, std::numeric_limits<double>::max()}
+};
+
+std::vector<Component> switches = {
+    {"Switch-A", 0.0, 0.0, 5.0, 30.0},
+    {"Switch-B", 0.0, 0.0, 5.0, 30.0},
+    {"Switch-C", 0.0, 0.0, 6.0, 35.0},
+    {"Switch-D", 0.0, 0.0, 6.0, 35.0},
+    {"Switch-E", 0.0, 0.0, 7.0, 40.0}
+};
+
+std::vector<Component> powerDividers = {
+    {"PowerDivider", -6.0, -7.0, 50.0, std::numeric_limits<double>::max()}
+};
+
+struct PathConfiguration {
+    std::vector<std::string> components;
+    double finalPower1GHz;
+    double finalPower20GHz;
+    double totalCost;
+};
+
+// Brute-force search for optimal path
+PathConfiguration findOptimalPath() {
+    PathConfiguration bestConfig;
+    bestConfig.totalCost = std::numeric_limits<double>::max();
+
+    for (const auto& amp : amplifiers) {
+        for (const auto& divider : powerDividers) {
+            for (const auto& att : attenuators) {
+                for (const auto& sw : switches) {
+                    double power1GHz = 0.0;
+                    double power20GHz = 0.0;
+                    double cost = 0.0;
+
+                    // Apply amplifier
+                    if (power1GHz + amp.gain1GHz <= amp.p1dB &&
+                        power20GHz + amp.gain20GHz <= amp.p1dB) {
+                        power1GHz += amp.gain1GHz;
+                        power20GHz += amp.gain20GHz;
+                        cost += amp.cost;
+                    } else {
+                        continue;
+                    }
+
+                    // Apply power divider
+                    power1GHz += divider.gain1GHz;
+                    power20GHz += divider.gain20GHz;
+                    cost += divider.cost;
+
+                    // Apply attenuator
+                    if (power1GHz + att.gain1GHz > MIN_POWER_1GHz &&
+                        power20GHz + att.gain20GHz > MIN_POWER_20GHz) {
+                        power1GHz += att.gain1GHz;
+                        power20GHz += att.gain20GHz;
+                        cost += att.cost;
+                    } else {
+                        continue;
+                    }
+
+                    // Apply switch
+                    if (power1GHz + sw.gain1GHz <= sw.p1dB &&
+                        power20GHz + sw.gain20GHz <= sw.p1dB) {
+                        power1GHz += sw.gain1GHz;
+                        power20GHz += sw.gain20GHz;
+                        cost += sw.cost;
+                    } else {
+                        continue;
+                    }
+
+                    // Check if configuration meets requirements
+                    if (power1GHz >= MAX_POWER_1GHz && power20GHz >= MAX_POWER_20GHz) {
+                        if (cost < bestConfig.totalCost) {
+                            bestConfig.components = {amp.name, divider.name, att.name, sw.name};
+                            bestConfig.finalPower1GHz = power1GHz;
+                            bestConfig.finalPower20GHz = power20GHz;
+                            bestConfig.totalCost = cost;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return bestConfig;
+}
+
+int main() {
+    // Find optimal configurations for P1 and P2
+    PathConfiguration pathP1 = findOptimalPath();
+    PathConfiguration pathP2 = findOptimalPath();
+
+    // Print results for P1
+    std::cout << "Path P1 Configuration: ";
+    for (const auto& component : pathP1.components) {
+        std::cout << component << " -> ";
+    }
+    std::cout << "END\n";
+
+    // Print results for P2
+    std::cout << "Path P2 Configuration: ";
+    for (const auto& component : pathP2.components) {
+        std::cout << component << " -> ";
+    }
+    std::cout << "END\n";
+
+    // Final results
+    std::cout << "\nFinal Results:\n";
+    std::cout << "1GHz Power Level (P1): " << pathP1.finalPower1GHz << " dBm (Expected: > " << MAX_POWER_1GHz << " dBm)\n";
+    std::cout << "1GHz Power Level (P2): " << pathP2.finalPower1GHz << " dBm (Expected: > " << MAX_POWER_1GHz << " dBm)\n";
+    std::cout << "20GHz Power Level (P1): " << pathP1.finalPower20GHz << " dBm (Expected: > " << MAX_POWER_20GHz << " dBm)\n";
+    std::cout << "20GHz Power Level (P2): " << pathP2.finalPower20GHz << " dBm (Expected: > " << MAX_POWER_20GHz << " dBm)\n";
+
+    double totalCost = pathP1.totalCost + pathP2.totalCost;
+    std::cout << "Total Cost: $" << totalCost << "\n";
+
+    return 0;
+}
